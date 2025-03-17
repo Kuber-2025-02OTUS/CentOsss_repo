@@ -1,0 +1,84 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-conf
+  namespace: homework
+data:
+  default.conf: |
+    server {
+        listen 8000;
+
+        server_name _;
+        root /homework;
+        index index.html;
+        location / { 
+          try_files $uri $uri/ /index.html;
+        }
+    }
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: homework
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1    # Максимум 1 недоступный под во время обновления
+      maxSurge: 1         # Можно создать 1 дополнительный под во время обновления
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      # Добавляем nodeSelector для запуска только на нодах с меткой homework=true
+      nodeSelector:
+        homework: "true"
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            exec:
+              command:
+                - test
+                - -f
+                - /homework/index.html
+            initialDelaySeconds: 5    # Подождем 5 секунд перед первой проверкой
+            periodSeconds: 5          # Проверяем каждые 5 секунд
+          lifecycle:
+            preStop:
+              exec:
+                command: ["rm", "-f", "/homework/index.html"]
+          volumeMounts:
+            - name: front-static
+              mountPath: "/homework"
+            - name: nginx-conf
+              mountPath: "/etc/nginx/conf.d/"
+      initContainers:
+        - name: download-static
+          image: busybox:1.28
+          command: 
+            - wget
+            - "-O"
+            - "/homework/index.html"
+            - "http://info.cern.ch"
+          volumeMounts:
+            - name: front-static
+              mountPath: "/homework"
+      volumes:
+        - name: front-static
+          emptyDir: {}  
+        - name: nginx-conf 
+          configMap:
+            name: nginx-conf
+            items:
+            - key: default.conf
+              path: default.conf

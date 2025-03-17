@@ -8,7 +8,7 @@ spec:
     - name: nginx
       image: nginx:latest
       ports:
-        - containerPort: 80
+        - containerPort: 8000
       lifecycle:
         preStop:
           exec:
